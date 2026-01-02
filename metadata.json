@@ -1,0 +1,5 @@
+{
+  "name": "Lidarbord",
+  "description": "Leaderboard application with Arabic support and decimal ranking, connected directly to a fixed Google Sheet source.",
+  "requestFramePermissions": []
+}
