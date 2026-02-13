@@ -3,10 +3,11 @@ import React from 'react';
 
 interface HeaderProps {
   onLogoClick: () => void;
+  onSwitchView: () => void;
+  viewMode: 'leaderboard' | 'points';
 }
 
-const Header: React.FC<HeaderProps> = ({ onLogoClick }) => {
-  // Using the direct download format for Google Drive images
+const Header: React.FC<HeaderProps> = ({ onLogoClick, onSwitchView, viewMode }) => {
   const logoUrl = "https://lh3.googleusercontent.com/d/1G4KHlAGhfqEfl5rVrzPdT5iIZwAulyTj";
 
   return (
@@ -19,27 +20,32 @@ const Header: React.FC<HeaderProps> = ({ onLogoClick }) => {
           <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 group-hover:scale-105 transition-transform overflow-hidden">
             <img 
               src={logoUrl} 
-              alt="IQRA Logo" 
+              alt="Logo" 
               className="w-full h-full object-cover"
               onError={(e) => {
-                // Fallback icon if the image fails to load
                 (e.target as HTMLImageElement).style.display = 'none';
-                (e.target as HTMLImageElement).parentElement!.innerHTML = '<i class="fas fa-book-open text-indigo-600 text-xl"></i>';
+                (e.target as HTMLImageElement).parentElement!.innerHTML = '<i class="fas fa-mosque text-sky-500 text-xl"></i>';
               }}
             />
           </div>
-          <div className="flex flex-col">
-            <span className="text-2xl font-black tracking-tight text-slate-800 leading-none">
-              IQRA <span className="text-indigo-600">Ranks</span>
+          <div className="flex flex-col items-start">
+            <span className="text-2xl font-black tracking-tight text-slate-800 leading-none" dir="rtl">
+              برنامج رمضان الخير
             </span>
-            <span className="text-sm font-bold text-slate-400 mt-1">Leaderboard System</span>
+            <span className="text-sm font-bold text-sky-500 mt-1" dir="rtl">مسجد الشفاء</span>
           </div>
         </div>
         
         <div className="flex items-center">
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-wide" dir="rtl">
-            مسجد <span className="text-indigo-600">الشفاء</span>
-          </h1>
+          <button
+            onClick={onSwitchView}
+            className={`px-6 py-2.5 ${viewMode === 'leaderboard' ? 'bg-sky-500' : 'bg-emerald-500'} text-white rounded-2xl text-sm font-bold shadow-lg transition-all active:scale-95 flex items-center hover:brightness-110`}
+          >
+            <i className={`fas ${viewMode === 'leaderboard' ? 'fa-list-check' : 'fa-trophy'} mr-2`}></i>
+            <span dir="rtl">
+              {viewMode === 'leaderboard' ? 'نظام النقاط' : 'العودة للنتائج'}
+            </span>
+          </button>
         </div>
       </div>
     </header>

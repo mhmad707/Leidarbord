@@ -8,6 +8,7 @@ export interface LeaderboardConfig {
   scoreColumn: string;
   rankColumn?: string;
   groupColumn?: string;
+  imageColumn?: string;
 }
 
 export interface GeminiAnalysis {

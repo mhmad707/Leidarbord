@@ -4,30 +4,36 @@ import { SheetRow, AppState } from './types';
 import { analyzeSheetData } from './services/gemini';
 import Header from './components/Header';
 import LeaderboardDisplay from './components/LeaderboardDisplay';
+import PointsSystemDisplay from './components/PointsSystemDisplay';
 
-const FIXED_SHEET_ID = '16-lTDAzjiErO4mRy7_hYhAua_6LQN4mMZ3SaYskhavE';
-const EXPORT_URL = `https://docs.google.com/spreadsheets/d/${FIXED_SHEET_ID}/export?format=csv`;
+const LEADERBOARD_SHEET_ID = '16-lTDAzjiErO4mRy7_hYhAua_6LQN4mMZ3SaYskhavE';
+const POINTS_SYSTEM_SHEET_ID = '1bH32M6_2_ehSTlo6iov4slxaX18U_HZlG5wOv8ecma4';
+
+type ViewMode = 'leaderboard' | 'points';
 
 const App: React.FC = () => {
+  const [viewMode, setViewMode] = useState<ViewMode>('leaderboard');
   const [state, setState] = useState<AppState>({
     data: [],
     analysis: null,
-    loading: true, // Start in loading state for auto-fetch
+    loading: true, 
     error: null,
-    sheetUrl: EXPORT_URL,
+    sheetUrl: '',
   });
 
   const parseCsv = (csvText: string): SheetRow[] => {
     const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
     if (lines.length === 0) return [];
 
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"(.*)"$/, '$1'));
+    // Simple CSV parser that handles quotes and commas
+    const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+    const headers = lines[0].split(regex).map(h => h.trim().replace(/^"(.*)"$/, '$1'));
+    
     return lines.slice(1).map(line => {
-      const values = line.split(',').map(v => v.trim().replace(/^"(.*)"$/, '$1'));
+      const values = line.split(regex).map(v => v.trim().replace(/^"(.*)"$/, '$1'));
       const row: SheetRow = {};
       headers.forEach((header, index) => {
         const val = values[index] || '';
-        // Attempt to parse decimals correctly (handle both . and ,)
         const numericVal = val.replace(',', '.');
         row[header] = !isNaN(Number(numericVal)) && val !== '' ? Number(numericVal) : val;
       });
@@ -35,58 +41,81 @@ const App: React.FC = () => {
     });
   };
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isSilent = false, targetMode?: ViewMode) => {
+    const mode = targetMode || viewMode;
+    const idToFetch = mode === 'leaderboard' ? LEADERBOARD_SHEET_ID : POINTS_SYSTEM_SHEET_ID;
+    
+    if (!isSilent) setState(prev => ({ ...prev, loading: true, data: isSilent ? prev.data : [] }));
+    
     try {
-      const response = await fetch(EXPORT_URL);
-      if (!response.ok) throw new Error('Failed to fetch sheet. Ensure it is public or shared.');
+      const freshUrl = `https://docs.google.com/spreadsheets/d/${idToFetch}/export?format=csv&cachebust=${Date.now()}`;
+      const response = await fetch(freshUrl);
+      if (!response.ok) throw new Error('Failed to fetch data.');
       
       const csvText = await response.text();
       const rows = parseCsv(csvText);
       
-      if (rows.length === 0) throw new Error('The sheet appears to be empty.');
+      if (rows.length === 0) throw new Error('The document appears to be empty.');
       
-      // We still run analysis to get the configuration if possible, 
-      // but we will only display the leaderboard.
-      try {
-        const analysis = await analyzeSheetData(rows);
-        setState(prev => ({ ...prev, data: rows, analysis, loading: false }));
-      } catch (err) {
-        // Fallback if AI fails
-        setState(prev => ({ ...prev, data: rows, loading: false }));
+      if (mode === 'leaderboard') {
+        try {
+          const analysis = await analyzeSheetData(rows);
+          setState(prev => ({ ...prev, data: rows, analysis, loading: false, error: null, sheetUrl: freshUrl }));
+        } catch (err) {
+          setState(prev => ({ ...prev, data: rows, loading: false, error: null, sheetUrl: freshUrl }));
+        }
+      } else {
+        setState(prev => ({ ...prev, data: rows, analysis: null, loading: false, error: null, sheetUrl: freshUrl }));
       }
     } catch (err: any) {
-      setState(prev => ({ ...prev, loading: false, error: err.message }));
+      if (!isSilent) setState(prev => ({ ...prev, loading: false, error: err.message }));
     }
-  }, []);
+  }, [viewMode]);
 
   useEffect(() => {
     fetchData();
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 30000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
-  // Determine configuration with C (index 2) as Name and D (index 3) as Rank
-  const getDisplayConfig = () => {
+  const handleToggleView = () => {
+    const nextMode = viewMode === 'leaderboard' ? 'points' : 'leaderboard';
+    setViewMode(nextMode);
+    fetchData(false, nextMode);
+  };
+
+  const getLeaderboardConfig = () => {
     if (state.data.length === 0) return { nameColumn: '', scoreColumn: '' };
     const headers = Object.keys(state.data[0]);
     return {
       nameColumn: headers[2] || headers[0],
       scoreColumn: headers[3] || headers[headers.length - 1],
-      groupColumn: headers[1] 
+      groupColumn: headers[1],
+      imageColumn: headers[4] // Column E
     };
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <Header onLogoClick={() => window.location.reload()} />
+      <Header 
+        onLogoClick={() => fetchData()} 
+        onSwitchView={handleToggleView}
+        viewMode={viewMode}
+      />
       
-      <main className="flex-grow container mx-auto px-4 py-8 max-w-3xl">
-        {state.loading && (
+      <main className="flex-grow container mx-auto px-4 py-8 max-w-4xl">
+        {state.loading && state.data.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-            <p className="text-slate-500 font-medium animate-pulse">Loading Rankings...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500"></div>
+            <p className="text-slate-500 font-medium animate-pulse">
+              {viewMode === 'leaderboard' ? 'Loading Rankings...' : 'Loading Points System...'}
+            </p>
           </div>
         )}
 
-        {!state.loading && state.error && (
+        {state.error && state.data.length === 0 && (
           <div className="bg-red-50 border border-red-200 text-red-800 px-6 py-4 rounded-2xl flex items-center shadow-sm">
             <i className="fas fa-exclamation-circle mr-3 text-xl"></i>
             <div>
@@ -96,19 +125,31 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {!state.loading && state.data.length > 0 && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <LeaderboardDisplay 
-              data={state.data} 
-              config={state.analysis?.config || getDisplayConfig()} 
-            />
+        {state.data.length > 0 && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="flex items-center justify-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+              </span>
+              <span>Live Updates Enabled</span>
+            </div>
+            
+            {viewMode === 'leaderboard' ? (
+              <LeaderboardDisplay 
+                data={state.data} 
+                config={state.analysis?.config || getLeaderboardConfig()} 
+              />
+            ) : (
+              <PointsSystemDisplay data={state.data} />
+            )}
           </div>
         )}
       </main>
 
       <footer className="py-8 border-t border-slate-200 bg-white mt-auto">
         <div className="container mx-auto px-4 text-center text-slate-400 text-sm">
-          &copy; {new Date().getFullYear()} IQRA Ranks - مسجد الشفاء. Optimized for Arabic.
+          &copy; {new Date().getFullYear()} IQRA Ranks - مسجد الشفاء. {viewMode === 'leaderboard' ? 'نتائج المسابقة' : 'نظام النقاط'}
         </div>
       </footer>
     </div>
