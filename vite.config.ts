@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
 
   return {
-    base: "/lidarboard/", // 🔴 MUST match GitHub repo name
+    base: "/Leidarbord/", // 🔴 MUST match GitHub repo name
     plugins: [react()],
     server: {
       port: 3000,
